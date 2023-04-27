@@ -1,35 +1,27 @@
 #!/usr/bin/env pybricks-micropython
-from pybricks.hubs import EV3Brick
+
+from pybricks import ev3brick as brick
 from pybricks.ev3devices import (Motor, TouchSensor, ColorSensor,
                                  InfraredSensor, UltrasonicSensor, GyroSensor)
-from pybricks.parameters import Port, Stop, Direction, Button, Color
-from pybricks.tools import wait, StopWatch, DataLog
+from pybricks.parameters import (Port, Stop, Direction, Button, Color,
+                                 SoundFile, ImageFile, Align)
+from pybricks.tools import print, wait, StopWatch
 from pybricks.robotics import DriveBase
-from pybricks.media.ev3dev import SoundFile, ImageFile
-import threading
 
 import struct
 
-ev3 = EV3Brick()
+# Declare motors
+left_motor = Motor(Port.A)
+right_motor = Motor(Port.D)
 
-LeftMotor = Motor(Port.A)
-RightMotor = Motor(Port.D)
-ClawMotor = Motor(Port.B)
-
-Reader = ColorSensor(Port.S1) #color sensor
-Button = TouchSensor(Port.S2) #touch sensor
-InfraRed = InfraredSensor(Port.S3) #infrared sensor
-
-robot = DriveBase(LeftMotor, RightMotor, wheel_diameter = 55.5, axle_track = 104)#MASOARA AMPATAMENTUL SI ROTILE(DURLY)
-
-
-# Write your program here.
+# Initialize variables.
+# Assuming sticks are in the middle when starting.
 right_stick_x = 124
-right_stick_y = 124
-DRIVESPEED = 100
-speed = 0
-turn = 0
-running = True
+left_stick_y = 124
+
+# A helper function for converting stick values (0 - 255)
+# to more usable numbers (-100 - 100)
+
 
 def scale(val, src, dst):
     """
@@ -44,19 +36,10 @@ def scale(val, src, dst):
     return (float(val - src[0]) / (src[1] - src[0])) * (dst[1] - dst[0]) + dst[0]
 
 
-def scale_stick(value):
-    return scale(value, (0, 255), (-100, 100))
-
-def clamp(value, floor=-100, ceil=100):
-    """
-    Clamp the value within the floor and ceiling values.
-    """
-    return max(min(value, ceil), floor)
-
 # Find the PS3 Gamepad:
 # /dev/input/event3 is the usual file handler for the gamepad.
 # look at contents of /proc/bus/input/devices if it doesn't work.
-infile_path = "/dev/input/event3" #SYSTEM PATH TO CONTROLLER(DURLY)
+infile_path = "/dev/input/event4"
 
 # open file in binary mode
 in_file = open(infile_path, "rb")
@@ -67,63 +50,23 @@ FORMAT = 'llHHI'
 EVENT_SIZE = struct.calcsize(FORMAT)
 event = in_file.read(EVENT_SIZE)
 
-
-class MotorThread(threading.Thread):
-    def __init__(self):
-        # Add more sensors and motors here if you need them
-        self.left_motor = LeftMotor
-        self.right_motor = RightMotor
-        threading.Thread.__init__(self)
-
-    def run(self):
-        print("Engine running!")
-        # Change this function to suit your robot.
-        # The code below is for driving a simple tank.
-        turns = 0;
-        
-        while running:
-            
-            right_dc = clamp(-speed-turn)
-            left_dc = clamp(-speed+turn)
-            if(InfraRed.distance < 500):
-                right_dc = right_dc / 2
-                left_dc = left_dc / 2
-            
-            if(Button.pressed == True):
-                break;
-            
-            self.right_motor.run_direct(duty_cycle_sp=right_dc)
-            self.left_motor.run_direct(duty_cycle_sp=left_dc)
-
-
-        self.motor.stop()
-
-motor_thread = MotorThread()
-motor_thread.setDaemon(True)
-motor_thread.start()
-
 while event:
     (tv_sec, tv_usec, ev_type, code, value) = struct.unpack(FORMAT, event)
-    if event.type == 3:
-        if event.code == 1:
-            Leftstick_Yvalue = scale(event.value, (0, 255),  (100, -100))
-            Leftstick_Xvalue = scale(event.value, (0, 255), (100, -100))
-            speed = scale_stick(event.value)
+    if ev_type == 3 and code == 3:
+        right_stick_x = value
+    if ev_type == 3 and code == 1:
+        left_stick_y = value
+    # Scale stick positions to -100,100
+    forward = scale(left_stick_y, (0, 255), (100, -100))
+    left = scale(right_stick_x, (0, 255), (100, -100))
 
-        if event.code == 0:    
-            turn = scale_stick(event.value)
-            
-            
-    if event.type == 1:
-        if event.code == 317:
-            ClawMotor.run_direct(100);        
-                
+    # Set motor voltages. If we're steering left, the left motor
+    # must run backwards so it has a -left component
+    # It has a forward component for going forward too.
+    left_motor.dc(forward - left)
+    right_motor.dc(forward + left)
+
     # Finally, read another event
     event = in_file.read(EVENT_SIZE)
 
 in_file.close()
-#red 5
-#blue 2
-#green 3
-#yellow 4
-# 
