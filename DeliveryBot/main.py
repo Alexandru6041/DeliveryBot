@@ -13,12 +13,19 @@ import struct
 # Declare motors
 left_motor = Motor(Port.A)
 right_motor = Motor(Port.D)
+claw_motor = Motor(Port.B)
 
+getDistance = UltrasonicSensor(Port.S3)
+Color = ColorSensor(Port.S4)
+Pressed = TouchSensor(Port.S1)
 # Initialize variables.
 # Assuming sticks are in the middle when starting.
 right_stick_x = 124
 left_stick_y = 124
-
+open_claw = False
+NULL = 0
+i = 1.0
+last_distance = -1
 # A helper function for converting stick values (0 - 255)
 # to more usable numbers (-100 - 100)
 
@@ -49,6 +56,13 @@ in_file = open(infile_path, "rb")
 FORMAT = 'llHHI'
 EVENT_SIZE = struct.calcsize(FORMAT)
 event = in_file.read(EVENT_SIZE)
+print("Running...")
+# speaker.set_speech_options('ro', 'm2')
+# speaker.set_volume(100, 'Beep')
+# speaker.set_volume(100, 'PCM')
+
+# speaker.beep(100, 300)
+# speaker.say('vorbesc limba romana')
 
 while event:
     (tv_sec, tv_usec, ev_type, code, value) = struct.unpack(FORMAT, event)
@@ -56,17 +70,45 @@ while event:
         right_stick_x = value
     if ev_type == 3 and code == 1:
         left_stick_y = value
+    if ev_type == 1:
+        if code == 305:
+            claw_motor.dc(100)
+            
+        elif code == 308:
+            claw_motor.dc(-100)
+            
+        elif code == 316:
+            in_file.close()
+            
     # Scale stick positions to -100,100
     forward = scale(left_stick_y, (0, 255), (100, -100))
     left = scale(right_stick_x, (0, 255), (100, -100))
+    
+    if(getDistance.distance() >= 300):
+        left_motor.dc(forward - left)
+        right_motor.dc(forward + left)
+    
+    if(getDistance.distance() < 300 and forward < 0):#
+        left_motor.dc(forward - left)
+        right_motor.dc(forward + left)
+        
+    elif(getDistance.distance() < 300 and getDistance.distance() > 5):
+        left_motor.dc(33 * (forward - left) / 100)
+        right_motor.dc(33 * (forward + left) / 100)
+        # brick.light.on(Color.YELLOW)
+    
+    elif(getDistance.distance() == 5):
+        left_motor.brake()
+        right_motor.brake()
 
-    # Set motor voltages. If we're steering left, the left motor
-    # must run backwards so it has a -left component
-    # It has a forward component for going forward too.
-    left_motor.dc(forward - left)
-    right_motor.dc(forward + left)
+    if(getDistance.distance() is not last_distance):
+        print(getDistance.distance())
+        print("\n")
+        last_distance = getDistance.distance()
 
+    
     # Finally, read another event
     event = in_file.read(EVENT_SIZE)
+
 
 in_file.close()
